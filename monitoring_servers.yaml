@@ -1,0 +1,60 @@
+---
+- name: Install and configure monitoring containers
+  hosts: monitoring_servers
+  become: true
+  vars:
+    grafana_data_dir: /opt/grafana/data
+    prometheus_data_dir: /opt/prometheus/data
+  tasks:
+    - name: Install Podman
+      package:
+        name: podman
+        state: present
+
+    - name: Create directories for persistent data
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items:
+        - "{{ grafana_data_dir }}"
+        - "{{ prometheus_data_dir }}"
+
+    - name: Start Grafana container
+      community.general.podman_container:
+        name: grafana
+        image: grafana/grafana:latest
+        state: started
+        ports:
+          - "3000:3000"
+        volumes:
+          - "{{ grafana_data_dir }}:/var/lib/grafana"
+
+    - name: Start Prometheus container
+      community.general.podman_container:
+        name: prometheus
+        image: prom/prometheus:latest
+        state: started
+        ports:
+          - "9090:9090"
+        volumes:
+          - "{{ prometheus_data_dir }}:/prometheus"
+
+    - name: Start Node Exporter container
+      community.general.podman_container:
+        name: node-exporter
+        image: prom/node-exporter:latest
+        state: started
+        ports:
+          - "9100:9100"
+
+    - name: Allow ports through firewalld
+      firewalld:
+        service: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      with_items:
+        - grafana
+        - prometheus
+        - node-exporter
